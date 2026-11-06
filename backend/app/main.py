@@ -1,21 +1,27 @@
 from __future__ import annotations
 
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Локальный файл игнорируется Git; явно заданное окружение имеет приоритет.
+load_dotenv(Path(__file__).resolve().parents[2] / '.env', override=False)
+
 from fastapi import FastAPI,Query,Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app import analytics,opponents,prediction,simulator,advisor
+from app import analytics,opponents,prediction,simulator,advisor,coaching,llm
 from app.data import query,get_meta,DEFINITIONS,LIMITATIONS,METRIC_LABELS,DB_PATH,MODEL_DIR
 from app.schemas import (Club,HealthResponse,MetaResponse,OverviewResponse,ResearchResponse,
     MatchAnalysisResponse,OpponentsResponse,PredictionRequest,PredictionResponse,
-    SimulationRequest,SimulationResponse,AdvisorRequest,AdvisorResponse)
+    SimulationRequest,SimulationResponse,AdvisorRequest,AdvisorResponse,AIRequest,BriefRequest,BriefResponse)
 
 app=FastAPI(title='Football AI — Тактический интеллект',version='1.0.0',
     description='Лабораторная работа №2. Сценарий №4: почему команда теряет очки. Историческая аналитика, проверка гипотез и выбор тактических экспериментов.',
     docs_url='/api/docs',redoc_url=None)
 app.add_middleware(CORSMiddleware,allow_origins=['http://localhost:5173','http://127.0.0.1:5173'],
-                   allow_methods=['GET','POST'],allow_headers=['Content-Type'])
+                   allow_methods=['GET','POST'],allow_headers=['Content-Type','X-Football-AI'])
 
 
 @app.exception_handler(ValueError)
@@ -105,3 +111,19 @@ def simulate(body: SimulationRequest):
 @app.post('/api/advisor',response_model=AdvisorResponse,summary='Приоритетные тактические эксперименты со свидетельствами')
 def advise(body: AdvisorRequest):
     return advisor.advise(**body.model_dump())
+
+
+@app.get('/api/advisor/ai/status',response_model=dict,summary='Готовность опционального внешнего AI')
+def ai_status(request: Request):
+    llm.check_local(request)
+    return llm.status()
+
+
+@app.post('/api/advisor/ai',response_model=llm.AIResponse,summary='Обоснованный анализ с внешним AI по кнопке')
+def ai_analysis(body: AIRequest,request: Request):
+    return llm.generate(body,request)
+
+
+@app.post('/api/coaching/brief',response_model=BriefResponse,summary='Тренерская сводка из проверенных расчётов')
+def brief(body: BriefRequest):
+    return coaching.coaching_brief(body)

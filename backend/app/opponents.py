@@ -10,6 +10,7 @@ from sklearn.preprocessing import StandardScaler
 
 from app.data import MODEL_DIR, frame, clean, connection, put_meta, club, RESULT_LABELS, METRIC_LABELS
 from app.visuals import style_visuals
+from app.coaching import opponent_snapshot
 
 STYLE_FEATURES=['passes','directness','pass_accuracy','shots','shot_quality',
                 'defensive_events','central_attack_share']
@@ -113,7 +114,10 @@ def opponent_analysis(team_id, opponent_id=None):
         h=own[own.opponent_id==opponent_id]
         context={'opponent':club(opponent_id),'cluster_id':a['labels'][opponent_id],
                  'profile':p.loc[opponent_id].to_dict(),'head_to_head':h[['match_id','match_date','goals_for','goals_against','xg','xga','points']].to_dict('records')}
+    visuals=style_visuals(a,team_id,opponent_id)
+    if opponent_id is not None:
+        visuals['coaching']=opponent_snapshot(team_id,opponent_id,df)
     return clean({'team':selected,'team_cluster':a['labels'][team_id],
         'team_profile':p.loc[team_id].to_dict(),'style_model':info,'against_styles':groups,
-        'visuals':style_visuals(a,team_id,opponent_id),
+        'visuals':visuals,
         'similar_to':club(target),'similar_opponents':similar,'opponent_context':context})

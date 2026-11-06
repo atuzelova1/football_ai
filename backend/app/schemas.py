@@ -62,6 +62,7 @@ class Hypothesis(BaseModel):
 
 
 class OverviewResponse(BaseModel):
+    coaching: dict[str,JsonValue]
     visuals: dict[str,JsonValue]
     team: Club
     season: str
@@ -193,6 +194,41 @@ class AdvisorRequest(ContextRequest):
     as_of: date | None = None
 
 
+class CoachRequest(AdvisorRequest):
+    opponent_id: TeamId
+    match_id: TeamId | None = None
+    historical_match_id: TeamId | None = None
+
+
+class AIRequest(CoachRequest):
+    question: str = Field(default='Какое тактическое изменение стоит проверить и почему?',min_length=5,max_length=1200)
+    previous_analysis_id: str | None = Field(default=None,pattern=r'^[a-f0-9-]{36}$')
+
+
+class BriefRequest(CoachRequest):
+    recommendation_id: str | None = Field(default=None,max_length=100)
+
+
+class BriefResponse(BaseModel):
+    created_at: str
+    team: Club
+    opponent: Club | None
+    season: str
+    is_home: bool
+    as_of: str | None
+    match_id: int | None
+    diagnosis: dict[str,JsonValue]
+    supporting_match: dict[str,JsonValue]
+    recommendation: dict[str,JsonValue]
+    alternatives: list[dict[str,JsonValue]]
+    baseline: dict[str,JsonValue]
+    scenario: dict[str,JsonValue]
+    evidence: list[Evidence]
+    limitations: list[str]
+    source: str
+    source_revision: str
+
+
 class SimulationBaseline(BaseModel):
     team: Club
     opponent: Club | None
@@ -239,6 +275,9 @@ class SimulationResponse(BaseModel):
 
 class Recommendation(BaseModel):
     id: str
+    supporting_match_id: int
+    evidence_match_criterion: str
+    evidence_quality: dict[str,JsonValue]
     title: str
     diagnosed_problem: str
     status: str
@@ -263,6 +302,7 @@ class Recommendation(BaseModel):
 
 class AdvisorResponse(BaseModel):
     selected_scenario_id: str | None
+    diagnosis: dict[str,JsonValue]
     team: Club
     opponent: Club | None
     recommendations: list[Recommendation]

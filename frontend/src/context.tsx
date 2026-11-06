@@ -13,6 +13,7 @@ import type {
   Evidence,
   HistoricalContext,
   Meta,
+  ModelMetrics,
   Priority,
   TacticalScenario,
   TeamMatch,
@@ -53,6 +54,8 @@ function initial(): Selection {
   }
   const q = new URLSearchParams(window.location.search);
   const savedState = { ...empty, ...saved };
+  if (!q.has("club") && !savedState.selectedClubId)
+    return { ...empty, selectedClubId: 360, selectedOpponentId: 220 };
   if (q.has("club")) {
     const club = positive(q.get("club")),
       opponent = positive(q.get("opponent")),
@@ -92,6 +95,7 @@ interface AppContext extends Selection {
   setOpponent: (id: number) => void;
   go: (path: string, patch?: Partial<Selection>) => void;
   openMatch: (match: TeamMatch) => void;
+  historicalForMatch: (match: TeamMatch) => HistoricalContext | null;
   showEvidence: (evidence: Evidence) => void;
   methodologyOpen: boolean;
   setMethodologyOpen: (open: boolean) => void;
@@ -106,6 +110,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const clubsApi = useApi<Club[]>("/api/clubs");
   const metaApi = useApi<Meta>("/api/meta");
+  const modelApi = useApi<ModelMetrics>("/api/prediction/metrics");
   const clubs = clubsApi.data ?? [];
   const matchesApi = useApi<TeamMatch[]>(
     `/api/clubs/${state.selectedClubId}/matches`,
@@ -119,7 +124,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (s.selectedMatchId) q.set("match", String(s.selectedMatchId));
     if (s.selectedResearchEvidence)
       q.set("evidence", s.selectedResearchEvidence.id);
-    return path + "?" + q.toString();
+    const destinations: Record<string, string> = {
+      "/prediction": "/opponents#prediction",
+      "/simulator": "/plan#scenarios",
+      "/advisor": "/plan#recommendation",
+    };
+    const [base, anchor] = (destinations[path] ?? path).split("#");
+    return base + "?" + q.toString() + (anchor ? "#" + anchor : "");
   };
   const apply = (path: string, patch: Partial<Selection>, replace = false) => {
     const next = { ...stateRef.current, ...patch };
@@ -218,6 +229,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const club = clubs.find((c) => c.team_id === state.selectedClubId) ?? null;
   const opponent =
     clubs.find((c) => c.team_id === state.selectedOpponentId) ?? null;
+  const historicalForMatch = (match: TeamMatch): HistoricalContext | null =>
+    modelApi.data?.splits.test.match_ids.includes(match.match_id)
+      ? {
+          teamId: match.team_id,
+          matchId: match.match_id,
+          opponentId: match.opponent_id,
+          date: match.match_date,
+          isHome: !!match.is_home,
+        }
+      : null;
+  useEffect(() => {
+    if (
+      state.selectedMatchId &&
+      !state.selectedHistoricalMatchContext &&
+      matchesApi.data &&
+      modelApi.data
+    ) {
+      const match = matchesApi.data.find(
+        (m) => m.match_id === state.selectedMatchId,
+      );
+      if (match && modelApi.data.splits.test.match_ids.includes(match.match_id))
+        update({
+          selectedHistoricalMatchContext: historicalForMatch(match),
+          isHome: !!match.is_home,
+        });
+    }
+  }, [
+    state.selectedMatchId,
+    state.selectedHistoricalMatchContext,
+    matchesApi.data,
+    modelApi.data,
+  ]);
   const value: AppContext = {
     ...state,
     clubs,
@@ -242,9 +285,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         selectedMatchId: match.match_id,
         selectedOpponentId: match.opponent_id,
         isHome: !!match.is_home,
-        selectedHistoricalMatchContext: null,
+        selectedHistoricalMatchContext: historicalForMatch(match),
         currentTacticalScenario: null,
       }),
+    historicalForMatch,
     showEvidence: (evidence) =>
       apply("/overview", { selectedResearchEvidence: evidence }),
     methodologyOpen,

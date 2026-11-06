@@ -95,6 +95,7 @@ export interface SeasonPoint {
   result: string;
 }
 export interface Overview {
+  coaching: CoachSnapshot;
   team: Club;
   season: string;
   summary: Summary;
@@ -232,6 +233,7 @@ export interface MatchAnalysis {
   shots: Shot[];
   coordinate_note: string;
   visuals: {
+    coaching: MatchReview;
     xg_timeline: { minute: number; team_xg: number; opponent_xg: number }[];
     quality_distribution: { label: string; team: number; opponent: number }[];
     attack_zones: {
@@ -307,6 +309,7 @@ export interface Opponents {
     };
   };
   visuals: {
+    coaching: OpponentReview;
     team_profiles: {
       team_id: number;
       cluster_id: number;
@@ -327,6 +330,16 @@ export interface Opponents {
   };
 }
 export interface ModelEvaluation {
+  calibration: {
+    class_label: string;
+    bins: {
+      lower: number;
+      upper: number;
+      n: number;
+      predicted: number;
+      observed: number;
+    }[];
+  }[];
   n: number;
   accuracy: number;
   macro_f1: number;
@@ -446,6 +459,14 @@ export interface Simulation {
 }
 export interface Recommendation {
   id: string;
+  supporting_match_id: number;
+  evidence_match_criterion: string;
+  evidence_quality: {
+    reliability: number;
+    sample_size: number;
+    cluster_clubs: number | null;
+    note: string;
+  };
   title: string;
   diagnosed_problem: string;
   status: string;
@@ -468,6 +489,7 @@ export interface Recommendation {
   opponent_context: StyleGroup | null;
 }
 export interface Advisor {
+  diagnosis: CoachSnapshot;
   team: Club;
   opponent: Club | null;
   selected_scenario_id: string | null;
@@ -516,4 +538,117 @@ export interface HistoricalContext {
   opponentId: number;
   date: string;
   isHome: boolean;
+}
+
+export interface CoachSnapshot {
+  match_selection?: {
+    match_id: number;
+    match_ids: number[];
+    metric: string;
+    value: number;
+    reference: number;
+    criterion: string;
+  };
+  title: string;
+  text: string;
+  metric: string;
+  evidence_id: string;
+  match_id: number;
+  scope: string;
+  observations: Research["findings"];
+  evidence?: Evidence[];
+  outcome_comparison?: { metric: string; without_win: number; wins: number; without_win_n: number; wins_n: number }[];
+}
+export interface MatchReview {
+  title: string;
+  result: string;
+  issue: string;
+  xg_leader: number | null;
+  xg_comparison: { category: "balanced" | "moderate" | "substantial"; difference: number; issue: string; note: string };
+  patterns: string[];
+  dangerous_event_ids: string[];
+  central_event_ids: string[];
+  low_quality_event_ids: string[];
+  note: string;
+}
+export interface OpponentReview {
+  comparisons: {
+    metric: string;
+    label: string;
+    value: number;
+    benchmark: number;
+    team_value: number;
+    status: "parity" | "uncertain" | "higher" | "lower";
+    sample_size: number;
+    mean_interval: [number,number] | null;
+    interpretation: string;
+  }[];
+  strengths: OpponentReview["comparisons"];
+  vulnerabilities: OpponentReview["comparisons"];
+  neutral: OpponentReview["comparisons"];
+  method: string;
+  question: string;
+  match_ids: number[];
+  note: string;
+}
+export interface AIAnalysis {
+  analysis_id: string;
+  team_id: number;
+  opponent_id: number;
+  model: string;
+  cached: boolean;
+  analysis: {
+    main_conclusion: string;
+    recommendation: string;
+    unverified: boolean;
+    why: { text: string; evidence_ids: string[] }[];
+    alternatives: { text: string; evidence_ids: string[] }[];
+    risks: string[];
+    evaluation_plan: string[];
+    missing_evidence: string[];
+  };
+  evidence: Evidence[];
+  scenario: ScenarioResult;
+  baseline: Simulation["baseline"];
+  scope_note: string;
+}
+export interface CoachingBrief {
+  created_at: string;
+  team: Club;
+  opponent: Club | null;
+  season: string;
+  is_home: boolean;
+  as_of: string | null;
+  match_id: number | null;
+  diagnosis: CoachSnapshot;
+  supporting_match: { date: string; opponent: Club; goals_for: number; goals_against: number };
+  recommendation: Pick<
+    Recommendation,
+    "id" | "title" | "experiment" | "evaluation_plan" | "risks" | "diagnosed_problem" | "status"
+  >;
+  baseline: Simulation["baseline"];
+  scenario: ScenarioResult;
+  evidence: Evidence[];
+  alternatives: {
+    title: string;
+    experiment: string;
+    modeled_delta_expected_points: number;
+  }[];
+  limitations: string[];
+  source: string;
+  source_revision: string;
+}
+export interface SavedScenario {
+  storageId: string;
+  name: string;
+  savedAt: string;
+  clubId: number;
+  opponentId: number;
+  matchId: number | null;
+  historicalContext: HistoricalContext | null;
+  isHome: boolean;
+  scenario: TacticalScenario;
+  priority: Priority;
+  maxInterventions: number;
+  priorityStrength: number;
 }

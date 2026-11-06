@@ -28,9 +28,10 @@ import {
   PageTitle,
   Panel,
   ResultBadge,
+  ResearchDetails,
 } from "../components";
 import { BLUE, RED, MINT, AMBER, ComparisonChart, TrendChart } from "../charts";
-import { clubName, date, n, pct, signed } from "../format";
+import { clubName, date, metricValue, metricUnit, n, pct, signed } from "../format";
 
 export default function OverviewPage() {
   const ctx = useApp();
@@ -69,6 +70,10 @@ export default function OverviewPage() {
   const o = overview.data,
     r = research.data,
     s = o.summary;
+  const diagnosis = o.coaching;
+  const problemMatch = ctx.matches?.find(
+    (m) => m.match_id === diagnosis.match_id,
+  );
   const position = o.league_table.find((t) => t.team_id === id)?.position;
   const series = o.visuals.season_series.map((p) => ({ ...p }));
   const ownMatches = ctx.matches ?? [];
@@ -91,301 +96,168 @@ export default function OverviewPage() {
   return (
     <>
       <PageTitle
-        eyebrow="01 / Обзор команды"
-        title="Игра за цифрами"
-        description="Исследуйте, где команда теряет очки — и какие решения стоит проверить."
-        action={
-          <button
-            className="text-button"
-            onClick={() => ctx.setMethodologyOpen(true)}
-          >
-            О данных и методе <ArrowUpRight size={15} />
-          </button>
-        }
+        eyebrow="Историческая тренерская лаборатория · 2015/16"
+        title="Панель тренера"
+        description="Что требует внимания и какое направление проверить с командой?"
       />
-      <section className="club-hero" data-team-id={o.team.team_id}>
-        <div className="hero-main">
-          <div className="eyebrow">
-            <span className="status-dot" />
-            Ла Лига · 2015/16 · Полный сезон
-          </div>
-          <div className="hero-club">
-            <ClubBadge name={o.team.name} large />
-            <div>
-              <h2>{clubName(o.team.name)}</h2>
-              <p>Тренерская исследовательская лаборатория</p>
-            </div>
-          </div>
-          <div className="hero-season-stats">
-            <div>
-              <b>
-                {position}
-                <sup>место</sup>
-              </b>
-              <span>в наблюдаемой таблице</span>
-            </div>
-            <div>
-              <b>
-                {s.points}
-                <sup>очков</sup>
-              </b>
-              <span>из {s.matches * 3} возможных</span>
-            </div>
-            <div>
-              <b>
-                {s.goals_for}
-                <em>:</em>
-                {s.goals_against}
-              </b>
-              <span>забито / пропущено</span>
-            </div>
+      <section className="club-hero" data-team-id={id}>
+        <div className="hero-club">
+          <ClubBadge name={o.team.name} large />
+          <div>
+            <h2>{clubName(o.team.name)}</h2>
+            <p>
+              {id === 360 ? "Исторический кейс: Райо Вальекано · " : ""}Ла Лига
+              2015/16 · {position}-е место
+            </p>
           </div>
         </div>
-        <div className="hero-decision">
-          <div className="hero-decision-top">
-            <span className="mini-icon">
-              <Sparkles size={20} />
-            </span>
-            <span>Ключевой вопрос исследования</span>
-          </div>
-          <h3>
-            Почему {clubName(o.team.name)}
-            <br />
-            теряет очки?
-          </h3>
-          <p>
-            <b>{s.points_dropped}</b> потерянных очков за сезон. Сопоставим
-            результат с качеством моментов и защитой.
-          </p>
-          <button className="button-primary" onClick={() => ctx.go("/advisor")}>
-            Перейти к тактическим решениям <ArrowUpRight size={16} />
+        <div className="hero-season-stats">
+          <span>
+            <b>{s.points}</b> очков
+          </span>
+          <span>
+            <b>
+              {s.goals_for}:{s.goals_against}
+            </b>{" "}
+            голы
+          </span>
+          <span>
+            {s.matches} матчей · {s.wins} побед · {s.draws} ничьих · {s.losses}{" "}
+            поражений
+          </span>
+        </div>
+      </section>
+      <section
+        className="coach-diagnosis"
+        aria-label="Главный вывод по команде"
+      >
+        <div>
+          <span className="eyebrow">Главный вывод</span>
+          <h2>{diagnosis.title}</h2>
+          <p>{diagnosis.text}</p>
+        </div>
+        <div className="diagnosis-actions">
+          <Action
+            onClick={() => problemMatch && ctx.openMatch(problemMatch)}
+            disabled={!problemMatch}
+          >
+            Разобрать матч-доказательство
+          </Action>
+          <button
+            className="text-button"
+            onClick={() => {
+              const e = [...r.evidence,...(diagnosis.evidence ?? [])].find((e) => e.id === diagnosis.evidence_id);
+              if (e) ctx.showEvidence(e);
+            }}
+          >
+            Показать доказательства <ArrowUpRight size={16} />
           </button>
         </div>
       </section>
-      <div className="season-strip">
-        <span>
-          <Flag size={15} />
-          {s.matches} матчей
-        </span>
-        <span>
-          <i className="dot" style={{ background: MINT }} />
-          {s.wins} побед
-        </span>
-        <span>
-          <i className="dot" style={{ background: AMBER }} />
-          {s.draws} ничьих
-        </span>
-        <span>
-          <i className="dot" style={{ background: RED }} />
-          {s.losses} поражений
-        </span>
-        <div className="strip-separator" />
-        <span className="tiny">Последние пять</span>
-        <div className="flex gap-1">
-          {o.recent_form.map((m) => (
-            <button
-              className="result-link"
-              key={m.match_id}
-              title={`Изучить матч: ${clubName(m.opponent_name)}, ${date(m.match_date)}`}
-              onClick={() => ctx.openMatch(m)}
-            >
-              <ResultBadge result={m.result} />
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="kpi-grid six">
+      <div className="kpi-grid five">
         <Kpi
           label="Созданный xG"
           value={n(s.xg)}
-          note="Качество всех ударов"
-          icon={<Target size={17} />}
+          note="Оценка всех созданных ударов"
         />
         <Kpi
           label="Допущенный xGA"
           value={n(s.xga)}
-          note="Опасность моментов соперника"
+          note="Оценка моментов соперника"
           tone="amber"
-          icon={<Shield size={17} />}
         />
         <Kpi
           label="Разница xG"
           value={signed(s.xgd, 1)}
-          note="Создание минус допущенные моменты"
-          tone={s.xgd >= 0 ? "mint" : "red"}
-          icon={<ChartNoAxesCombined size={17} />}
+          note="Создано минус допущено"
         />
         <Kpi
           label="Удары за матч"
           value={n(s.per_match.shots)}
-          note={`${s.shots} ударов за сезон`}
-          icon={<Crosshair size={17} />}
+          note={`xG/удар ${n(s.shot_quality, 3)}`}
         />
         <Kpi
-          label="Качество удара"
-          value={n(s.shot_quality, 3)}
-          note="ΣxG / Σударов за сезон"
-          icon={<Target size={17} />}
+          label="Недобор очков"
+          value={s.points_dropped}
+          note={`До максимума: ${s.matches * 3} очков`}
         />
-        <Kpi
-          label="Опасные удары соперника"
-          value={s.dangerous_against}
-          note="Удары с xG ≥ 0,20"
-          tone="red"
-          icon={<Shield size={17} />}
-        />
+      </div>
+      <div className="insight-grid">
+        {r.findings.slice(0, 3).map((f) => (
+          <article className="insight-card" key={f.id}>
+            <h3>{f.title}</h3>
+            <p>{f.text}</p>
+            <button
+              className="text-button"
+              onClick={() => {
+                const e = r.evidence.find((e) => f.evidence_ids.includes(e.id));
+                if (e) ctx.showEvidence(e);
+              }}
+            >
+              Основания <ArrowRight size={16} />
+            </button>
+          </article>
+        ))}
       </div>
       <div className="grid-main">
         <Panel
-          title="Качество игры по ходу сезона"
-          subtitle="Результат рядом с ожидаемыми голами — без выводов о причинности"
-          action={
-            <div className="segmented">
-              {[
-                ["attack", "Атака"],
-                ["defense", "Защита"],
-                ["form", "Форма"],
-              ].map(([v, l]) => (
-                <button
-                  className={trend === v ? "active" : ""}
-                  key={v}
-                  onClick={() => setTrend(v)}
-                >
-                  {l}
-                </button>
-              ))}
-            </div>
-          }
+          title="Как менялось качество игры"
+          subtitle="xG и xGA по матчам сезона; это оценки моментов, не счёт"
         >
-          {trend === "attack" ? (
-            <TrendChart
-              data={series}
-              lines={[
-                { key: "xg", name: "Созданный xG", color: BLUE },
-                { key: "goals_for", name: "Забитые голы", color: MINT },
-              ]}
-            />
-          ) : trend === "defense" ? (
-            <TrendChart
-              data={series}
-              lines={[
-                { key: "xga", name: "Допущенный xGA", color: AMBER },
-                { key: "goals_against", name: "Пропущенные голы", color: RED },
-              ]}
-            />
-          ) : (
-            <TrendChart
-              data={o.rolling.map((p, i) => ({ ...p, round: i + 1 }))}
-              lines={[
-                { key: "xgd", name: "Средняя разница xG", color: BLUE },
-                { key: "points", name: "Средние очки", color: MINT },
-              ]}
-            />
-          )}
-          <p className="chart-note">
-            {trend === "form"
-              ? o.rolling_note
-              : "По горизонтали — тур сезона. Наведите на график для точных значений."}
-          </p>
-        </Panel>
-        <Panel title="Результат и ожидание" subtitle="Сумма за полный сезон">
-          <ComparisonChart
-            data={[
-              { label: "Атака", actual: s.goals_for, expected: s.xg },
-              { label: "Защита", actual: s.goals_against, expected: s.xga },
-            ]}
-            bars={[
-              { key: "actual", name: "Голы", color: BLUE },
-              { key: "expected", name: "xG / xGA", color: AMBER },
+          <TrendChart
+            data={series}
+            lines={[
+              { key: "xg", name: "Созданный xG", color: BLUE },
+              { key: "xga", name: "Допущенный xGA", color: AMBER },
             ]}
           />
+        </Panel>
+        <Panel
+          title="Сравнение с лигой"
+          subtitle="Среднее за матч; остальные 19 клубов"
+        >
+          <div className="benchmark-list">
+            {o.visuals.league_comparison
+              .filter((c) => ["xg", "xga", "shot_quality"].includes(c.metric))
+              .map((c) => (
+                <div key={c.metric}>
+                  <span>{c.label}</span>
+                  <strong>
+                    {n(c.team, c.metric === "shot_quality" ? 3 : 2)}
+                  </strong>
+                  <small>
+                    Лига: {n(c.league, c.metric === "shot_quality" ? 3 : 2)}
+                  </small>
+                </div>
+              ))}
+          </div>
           <p className="chart-note">
-            Расхождение включает реализацию и шум. Автоголы входят в счёт, но не
-            в xG ударов.
+            Различие описательное: сила календаря не выровнена.
           </p>
         </Panel>
       </div>
       <Panel
-        title="Что скрывается за турнирной таблицей"
-        subtitle="Автоматически рассчитанные наблюдения, связанные с исходными матчами"
-        action={
-          <span className="pill">
-            <FlaskIcon />
-            {r.hypotheses.length} гипотезы
-          </span>
+        title="Матчи для проверки вывода"
+        subtitle={
+          diagnosis.match_selection?.criterion ??
+          "Встречи без победы с заметным отклонением показателя"
         }
       >
-        <div className="insight-grid">
-          {r.findings.map((f, i) => (
-            <article className="insight-card" key={f.id}>
-              <div className="insight-top">
-                <span className="insight-number">0{i + 1}</span>
-                <span
-                  className={`tiny ${f.supported_pattern ? "text-amber" : ""}`}
-                >
-                  {f.supported_pattern
-                    ? "Требует внимания"
-                    : "Проверено в исследовании"}
-                </span>
-              </div>
-              <h3>{f.title}</h3>
-              <p>{f.text}</p>
-              <small>
-                {f.limitation ??
-                  "Наблюдательное сравнение. Разница не доказывает причину потери очков."}
-              </small>
-              <button
-                className="text-button"
-                onClick={() => {
-                  const e = r.evidence.find((e) =>
-                    f.evidence_ids.includes(e.id),
-                  );
-                  if (e) ctx.showEvidence(e);
-                }}
-              >
-                Показать доказательства <ArrowRight size={14} />
-              </button>
-            </article>
-          ))}
+        <div className="problem-matches">
+          {(diagnosis.match_selection?.match_ids ?? [diagnosis.match_id])
+            .map((mid) => ownMatches.find((m) => m.match_id === mid))
+            .filter((m): m is NonNullable<typeof m> => !!m)
+            .map((m) => (
+              <MatchCard
+                key={m.match_id}
+                match={m}
+                onClick={() => ctx.openMatch(m)}
+              />
+            ))}
         </div>
       </Panel>
-      <Panel
-        title="Какие показатели связаны с результатом"
-        subtitle="Средние значения в победах, ничьих и поражениях — отдельное сравнение количества и качества"
-        action={
-          <label className="field">
-            Показатель
-            <select
-              aria-label="Показатель по исходам"
-              value={resultMetric}
-              onChange={(e) => setResultMetric(e.target.value)}
-            >
-              {r.comparisons.map((c) => (
-                <option key={c.metric} value={c.metric}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        }
-      >
-        <ComparisonChart
-          data={byResult.by_result.map((g) => ({
-            label: `${g.result} · n=${g.n}`,
-            mean: g.mean,
-          }))}
-          bars={[{ key: "mean", name: byResult.label, color: BLUE }]}
-        />
-        <p className="chart-note">
-          Среднее клуба: {n(byResult.team, 3)}; остальных клубов:{" "}
-          {n(byResult.league_others, 3)}. Корреляция Спирмена с очками:{" "}
-          {n(correlation?.spearman_with_points, 3)}. Доли точности и передач
-          показаны в диапазоне 0–1. Доля передач — событийный прокси контроля
-          мяча, а не время владения. Сравнение наблюдательное и не доказывает
-          причинность.
-        </p>
-      </Panel>
-      <div className="grid-two">
+      <ResearchDetails title="Сравнение с остальными клубами">
+        {" "}
         <Panel
           title="Команда относительно лиги"
           subtitle="Индекс: средний уровень остальных клубов = 100"
@@ -399,48 +271,94 @@ export default function OverviewPage() {
           />
           <p className="chart-note">{o.visuals.comparison_note}</p>
         </Panel>
+      </ResearchDetails>
+      <ResearchDetails title="Подробнее об исследовании: показатели по исходам">
         <Panel
-          title="Дома и в гостях"
-          subtitle="Средние значения на матч, по 19 наблюдений"
+          title="Какие показатели связаны с результатом"
+          subtitle="Средние значения в победах, ничьих и поражениях — отдельное сравнение количества и качества"
+          action={
+            <label className="field">
+              Показатель
+              <select
+                aria-label="Показатель по исходам"
+                value={resultMetric}
+                onChange={(e) => setResultMetric(e.target.value)}
+              >
+                {r.comparisons.map((c) => (
+                  <option key={c.metric} value={c.metric}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          }
         >
           <ComparisonChart
-            data={home}
-            bars={[
-              { key: "xg", name: "xG за матч", color: BLUE },
-              { key: "xga", name: "xGA за матч", color: AMBER },
-            ]}
+            data={byResult.by_result.map((g) => ({
+              label: `${g.result} · n=${g.n}`,
+              mean: g.mean,
+            }))}
+            bars={[{ key: "mean", name: byResult.label, color: BLUE }]}
+            valueFormatter={(v)=>metricValue(resultMetric,v)}
           />
-          <div className="home-points">
-            {home.map((h) => (
-              <span key={h.label}>
-                {h.label}: <b>{n(h.points, 2)} очка / матч</b>
-              </span>
+          <p className="chart-note">
+            Среднее клуба: {metricValue(resultMetric,byResult.team)}; остальных клубов:{" "}
+            {metricValue(resultMetric,byResult.league_others)} ({metricUnit(resultMetric)}). Корреляция Спирмена с очками:{" "}
+            {n(correlation?.spearman_with_points, 3)}. Доли точности и передач
+            показаны в процентах. Доля передач — событийный прокси контроля
+            мяча, а не время владения. Сравнение наблюдательное и не доказывает
+            причинность.
+          </p>
+        </Panel>
+      </ResearchDetails>
+      <ResearchDetails title="Домашние и выездные матчи">
+        {" "}
+        <div className="home-context-grid">
+          <Panel
+            title="Дома и в гостях"
+            subtitle="Средние значения на матч, по 19 наблюдений"
+          >
+            <ComparisonChart
+              data={home}
+              bars={[
+                { key: "xg", name: "xG за матч", color: BLUE },
+                { key: "xga", name: "xGA за матч", color: AMBER },
+              ]}
+            />
+            <div className="home-points">
+              {home.map((h) => (
+                <span key={h.label}>
+                  {h.label}: <b>{n(h.points, 2)} очка / матч</b>
+                </span>
+              ))}
+            </div>
+          </Panel>
+        </div>
+      </ResearchDetails>
+      <ResearchDetails title="Все матчи сезона">
+        <Panel
+          title="Результаты по всему сезону"
+          subtitle="Каждая ячейка открывает реальный матч"
+        >
+          <div className="season-results">
+            {ownMatches.map((m) => (
+              <button
+                key={m.match_id}
+                className={`season-result result-${m.result}`}
+                title={`${date(m.match_date)} · ${clubName(m.opponent_name)} · ${m.goals_for}:${m.goals_against}`}
+                aria-label={`Изучить этот матч: ${clubName(m.opponent_name)}, ${m.goals_for}:${m.goals_against}`}
+                onClick={() => ctx.openMatch(m)}
+              >
+                <small>{m.match_week}</small>
+                <b>
+                  {m.goals_for}:{m.goals_against}
+                </b>
+                <span>{m.is_home ? "Д" : "Г"}</span>
+              </button>
             ))}
           </div>
         </Panel>
-      </div>
-      <Panel
-        title="Результаты по всему сезону"
-        subtitle="Каждая ячейка открывает реальный матч"
-      >
-        <div className="season-results">
-          {ownMatches.map((m) => (
-            <button
-              key={m.match_id}
-              className={`season-result result-${m.result}`}
-              title={`${date(m.match_date)} · ${clubName(m.opponent_name)} · ${m.goals_for}:${m.goals_against}`}
-              aria-label={`Изучить этот матч: ${clubName(m.opponent_name)}, ${m.goals_for}:${m.goals_against}`}
-              onClick={() => ctx.openMatch(m)}
-            >
-              <small>{m.match_week}</small>
-              <b>
-                {m.goals_for}:{m.goals_against}
-              </b>
-              <span>{m.is_home ? "Д" : "Г"}</span>
-            </button>
-          ))}
-        </div>
-      </Panel>
+      </ResearchDetails>
       <section
         ref={evidenceRef}
         className="evidence-section"
@@ -460,117 +378,99 @@ export default function OverviewPage() {
             }
           >
             <EvidenceCard evidence={selectedEvidence} />
+            <div className="evidence-match-list">
+              {ownMatches
+                .filter((m) => selectedEvidence.match_ids.includes(m.match_id))
+                .map((m) => (
+                  <MatchCard
+                    key={m.match_id}
+                    match={m}
+                    onClick={() => ctx.openMatch(m)}
+                  />
+                ))}
+            </div>
           </Panel>
         )}
       </section>
-      <Panel
-        title="Научная проверка гипотез"
-        subtitle="Четыре теста; значимость оценивается после поправки Holm"
-      >
-        <div className="hypothesis-grid">
-          {r.hypotheses.map((h) => (
-            <Disclosure key={h.id} title={h.question}>
-              <div className="hypothesis-result">
-                <span
-                  className={`pill ${h.significant ? "pill-mint" : "pill-amber"}`}
-                >
-                  {h.significant
-                    ? "Значимо после Holm"
-                    : "Недостаточно оснований"}
-                </span>
-                <span>
-                  p = {n(h.p_value, 4)} · p после Holm = {n(h.p_adjusted, 4)}
-                </span>
-              </div>
-              <p>
-                <b>H₀:</b> {h.h0}
-              </p>
-              <p>
-                <b>H₁:</b> {h.h1}
-              </p>
-              <p>
-                <b>Метод:</b> {h.method}
-              </p>
-              <p>
-                Объём выборки: {Object.values(h.sample_size).join(" / ")}.
-                Статистика: {n(h.statistic, 3)}.
-              </p>
-              {h.effect_size && (
-                <p>
-                  {h.effect_size.name}: {n(h.effect_size.value, 3)}.
-                </p>
-              )}
-              {h.confidence_interval && (
-                <p>
-                  95% интервал: [{n(h.confidence_interval.lower, 3)};{" "}
-                  {n(h.confidence_interval.upper, 3)}].{" "}
-                  {h.confidence_interval.method}.
-                </p>
-              )}
-              <p>{h.interpretation}</p>
-              {h.limitations.map((t) => (
-                <p className="tiny" key={t}>
-                  {t}
-                </p>
-              ))}
-              <p className="tiny">{h.correction}</p>
-            </Disclosure>
-          ))}
-        </div>
-      </Panel>
-      <Disclosure title="Исследовательский вопрос, наблюдения и ограничения">
-        <p>{r.problem.question}</p>
-        <p>
-          Пользователь: {r.problem.user}. Решение: {r.problem.decision}
-        </p>
-        <p>
-          {s.matches} матчей клуба, {ctx.meta?.coverage.matches} матчей лиги.
-          События, xG и счёт измерены источником; результаты сценариев
-          моделируются.
-        </p>
-        {r.limitations.map((t) => (
-          <p key={t}>{t}</p>
-        ))}
-      </Disclosure>
-      <div className="grid-two">
+      <ResearchDetails title="Научная проверка: гипотезы и ограничения">
         <Panel
-          title="Последние матчи"
-          subtitle="Откройте встречу для исследования эпизодов"
-          action={
-            <button className="text-button" onClick={() => ctx.go("/matches")}>
-              Все матчи <ArrowUpRight size={15} />
-            </button>
-          }
+          title="Научная проверка гипотез"
+          subtitle="Четыре теста; значимость оценивается после поправки Holm"
         >
-          {ownMatches
-            .slice(-3)
-            .reverse()
-            .map((m) => (
-              <MatchCard
-                key={m.match_id}
-                match={m}
-                onClick={() => ctx.openMatch(m)}
-              />
+          <div className="hypothesis-grid">
+            {r.hypotheses.map((h) => (
+              <Disclosure key={h.id} title={h.question}>
+                <div className="hypothesis-result">
+                  <span
+                    className={`pill ${h.significant ? "pill-mint" : "pill-amber"}`}
+                  >
+                    {h.significant
+                      ? "Значимо после Holm"
+                      : "Недостаточно оснований"}
+                  </span>
+                  <span>
+                    p = {n(h.p_value, 4)} · p после Holm = {n(h.p_adjusted, 4)}
+                  </span>
+                </div>
+                <p>
+                  <b>H₀:</b> {h.h0}
+                </p>
+                <p>
+                  <b>H₁:</b> {h.h1}
+                </p>
+                <p>
+                  <b>Метод:</b> {h.method}
+                </p>
+                <p>
+                  Объём выборки: {Object.values(h.sample_size).join(" / ")}.
+                  Статистика: {n(h.statistic, 3)}.
+                </p>
+                {h.effect_size && (
+                  <p>
+                    {h.effect_size.name}: {n(h.effect_size.value, 3)}.
+                  </p>
+                )}
+                {h.confidence_interval && (
+                  <p>
+                    95% интервал: [{n(h.confidence_interval.lower, 3)};{" "}
+                    {n(h.confidence_interval.upper, 3)}].{" "}
+                    {h.confidence_interval.method}.
+                  </p>
+                )}
+                <p>{h.interpretation}</p>
+                {h.limitations.map((t) => (
+                  <p className="tiny" key={t}>
+                    {t}
+                  </p>
+                ))}
+                <p className="tiny">{h.correction}</p>
+              </Disclosure>
             ))}
-        </Panel>
-        <div className="next-step">
-          <span className="eyebrow">Следующий шаг</span>
-          <h2>
-            От наблюдения —<br />к тактической гипотезе
-          </h2>
-          <p>
-            Сначала проверьте конкретный матч и стиль соперника. Затем сравните
-            возможные изменения.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Action secondary onClick={() => ctx.go("/matches")}>
-              Исследовать матчи
-            </Action>
-            <Action secondary onClick={() => ctx.go("/opponents")}>
-              Сравнить с соперниками
-            </Action>
           </div>
+        </Panel>
+        <Disclosure title="Исследовательский вопрос, наблюдения и ограничения">
+          <p>{r.problem.question}</p>
+          <p>
+            Пользователь: {r.problem.user}. Решение: {r.problem.decision}
+          </p>
+          <p>
+            {s.matches} матчей клуба, {ctx.meta?.coverage.matches} матчей лиги.
+            События и счёт записаны источником; xG оценён моделью StatsBomb,
+            результаты сценариев моделируются.
+          </p>
+          {r.limitations.map((t) => (
+            <p key={t}>{t}</p>
+          ))}
+        </Disclosure>
+      </ResearchDetails>
+      <div className="next-step horizontal">
+        <div>
+          <h2>Перейти к подготовке</h2>
+          <p>Проверьте соперника или сравните тактические гипотезы.</p>
         </div>
+        <Action onClick={() => ctx.go("/opponents")}>
+          Подготовиться к сопернику
+        </Action>
       </div>
       <p className="tiny">{o.table_note}</p>
     </>

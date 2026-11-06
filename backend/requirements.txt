@@ -9,3 +9,7 @@ scikit-learn==1.6.1
 joblib==1.4.2
 pytest==9.2.0
 httpx==0.28.1
+openai==3.46.0
+httpx2==2.16.0
+h2==4.4.1
+python-dotenv==1.2.4

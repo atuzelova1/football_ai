@@ -23,6 +23,7 @@ import {
   PageTitle,
   Panel,
   ResultBadge,
+  ResearchDetails,
 } from "../components";
 import {
   BLUE,
@@ -73,7 +74,9 @@ export default function MatchesPage() {
           ? {
               selectedOpponentId: selected.opponent_id,
               isHome: !!selected.is_home,
-              selectedHistoricalMatchContext: null,
+              selectedHistoricalMatchContext: selected
+                ? ctx.historicalForMatch(selected)
+                : null,
             }
           : {}),
       });
@@ -97,14 +100,14 @@ export default function MatchesPage() {
         selectedMatchId: selected.match_id,
         selectedOpponentId: selected.opponent_id,
         isHome: !!selected.is_home,
-        selectedHistoricalMatchContext: null,
+        selectedHistoricalMatchContext: ctx.historicalForMatch(selected),
       }
     : {};
   return (
     <>
       <PageTitle
         eyebrow="02 / Анализ матчей"
-        title="Матчевая лаборатория"
+        title="Разбор матчей"
         description="Сопоставьте счёт с моментами. Найдите эпизоды, которые стоит разобрать с командой."
       />
       <div className="match-laboratory">
@@ -155,7 +158,8 @@ export default function MatchesPage() {
                           selectedMatchId: m.match_id,
                           selectedOpponentId: m.opponent_id,
                           isHome: !!m.is_home,
-                          selectedHistoricalMatchContext: null,
+                          selectedHistoricalMatchContext:
+                            ctx.historicalForMatch(m),
                         })
                       }
                     />
@@ -220,6 +224,34 @@ export default function MatchesPage() {
                   <b>{n(own.xga, 2)}</b>
                 </div>
               </section>
+              <Panel
+                title="Почему этот матч заслуживает внимания?"
+                className="light-surface match-brief"
+              >
+                <h3>{a.visuals.coaching.issue}</h3>
+                <div className="match-patterns">
+                  {a.visuals.coaching.patterns.map((p) => (
+                    <p key={p}>{p}</p>
+                  ))}
+                </div>
+                <Disclosure title="Как описывается разница xG">
+                  <p>{a.visuals.coaching.xg_comparison.note}</p>
+                </Disclosure>
+                <div className="action-row">
+                  <Action secondary onClick={goOpponent}>
+                    Анализировать соперника
+                  </Action>
+                  <Action onClick={() => ctx.go("/simulator", matchPatch)}>
+                    Сравнить тактические решения
+                  </Action>
+                  <button
+                    className="text-button"
+                    onClick={() => ctx.go("/advisor", matchPatch)}
+                  >
+                    Спросить AI-советника <ArrowUpRight size={14} />
+                  </button>
+                </div>
+              </Panel>
               <div className="kpi-grid four">
                 <Kpi
                   label="Удары"
@@ -253,20 +285,7 @@ export default function MatchesPage() {
               >
                 <ShotPitch analysis={a} />
               </Panel>
-              <Panel
-                title="Какие показатели могут объяснять потерю очков?"
-                className="interpretation-panel"
-              >
-                <p className="interpretation">{a.visuals.interpretation}</p>
-                <div className="action-row">
-                  <Action secondary onClick={goOpponent}>
-                    Изучить этого соперника
-                  </Action>
-                  <Action onClick={() => ctx.go("/simulator", matchPatch)}>
-                    Проверить тактический сценарий
-                  </Action>
-                </div>
-              </Panel>
+
               <Panel
                 title="Как накапливался xG"
                 subtitle="Суммарный xG по минутам; время округлено до минуты"
@@ -284,98 +303,114 @@ export default function MatchesPage() {
                   ]}
                 />
               </Panel>
-              <div className="grid-two">
+              <ResearchDetails title="Подробности матча: передачи, зоны и защита">
                 <Panel
-                  title="Количество и качество ударов"
-                  subtitle="Число ударов в диапазоне xG"
+                  title="Какие показатели могут объяснять потерю очков?"
+                  className="interpretation-panel"
                 >
-                  <ComparisonChart
-                    data={a.visuals.quality_distribution}
-                    bars={[
-                      { key: "team", name: "Команда", color: BLUE },
-                      { key: "opponent", name: "Соперник", color: AMBER },
-                    ]}
-                  />
-                </Panel>
-                <Panel
-                  title="Из каких зон возникала опасность"
-                  subtitle="xG ударов по зонам штрафной"
-                >
-                  <ComparisonChart
-                    data={a.visuals.attack_zones}
-                    horizontal
-                    bars={[
-                      { key: "team_xg", name: "Созданный xG", color: BLUE },
-                      {
-                        key: "opponent_xg",
-                        name: "Допущенный xG",
-                        color: AMBER,
-                      },
-                    ]}
-                  />
-                </Panel>
-              </div>
-              <div className="grid-two">
-                <Panel
-                  title="Карта направлений передач"
-                  subtitle={`${clubName(own.name)} · частота переходов между зонами`}
-                >
-                  <PassingHeatmap value={a} />
-                </Panel>
-                <Panel
-                  title="Пас и защитная работа"
-                  subtitle="События, а не трекинг движения игроков"
-                >
-                  <div className="stat-comparison-header">
-                    <span>Показатель</span>
-                    <span>Команда</span>
-                    <span>Соперник</span>
+                  <p className="interpretation">{a.visuals.interpretation}</p>
+                  <div className="action-row">
+                    <Action secondary onClick={goOpponent}>
+                      Изучить этого соперника
+                    </Action>
+                    <Action onClick={() => ctx.go("/simulator", matchPatch)}>
+                      Проверить тактический сценарий
+                    </Action>
                   </div>
-                  {[
-                    ["Передачи", n(own.passes, 0), n(opp.passes, 0)],
-                    [
-                      "Завершённые",
-                      n(own.completed_passes, 0),
-                      n(opp.completed_passes, 0),
-                    ],
-                    [
-                      "Точность",
-                      pct(own.pass_accuracy),
-                      pct(opp.pass_accuracy),
-                    ],
-                    [
-                      "Прогрессивные",
-                      n(own.progressive_passes, 0),
-                      n(opp.progressive_passes, 0),
-                    ],
-                    [
-                      "Защитные события",
-                      n(own.defensive_events, 0),
-                      n(opp.defensive_events, 0),
-                    ],
-                    [
-                      "Возвраты мяча",
-                      n(own.ball_recoveries, 0),
-                      n(opp.ball_recoveries, 0),
-                    ],
-                  ].map(([label, v, w]) => (
-                    <div key={label} className="stat-comparison-row">
-                      <span>{label}</span>
-                      <b>{v}</b>
-                      <b>{w}</b>
+                </Panel>{" "}
+                <div className="grid-two">
+                  <Panel
+                    title="Количество и качество ударов"
+                    subtitle="Число ударов в диапазоне xG"
+                  >
+                    <ComparisonChart
+                      data={a.visuals.quality_distribution}
+                      bars={[
+                        { key: "team", name: "Команда", color: BLUE },
+                        { key: "opponent", name: "Соперник", color: AMBER },
+                      ]}
+                    />
+                  </Panel>
+                  <Panel
+                    title="Из каких зон возникала опасность"
+                    subtitle="xG ударов по зонам штрафной"
+                  >
+                    <ComparisonChart
+                      data={a.visuals.attack_zones}
+                      horizontal
+                      bars={[
+                        { key: "team_xg", name: "Созданный xG", color: BLUE },
+                        {
+                          key: "opponent_xg",
+                          name: "Допущенный xG",
+                          color: AMBER,
+                        },
+                      ]}
+                    />
+                  </Panel>
+                </div>
+                <div className="grid-two">
+                  <Panel
+                    title="Карта направлений передач"
+                    subtitle={`${clubName(own.name)} · частота переходов между зонами`}
+                  >
+                    <PassingHeatmap value={a} />
+                  </Panel>
+                  <Panel
+                    title="Пас и защитная работа"
+                    subtitle="События, а не трекинг движения игроков"
+                  >
+                    <div className="stat-comparison-header">
+                      <span>Показатель</span>
+                      <span>Команда</span>
+                      <span>Соперник</span>
                     </div>
-                  ))}
-                  <p className="chart-note">
-                    Защитные события — единоборства, перехваты, блоки и выносы.
-                    Их число не измеряет компактность или эффективность
-                    прессинга.
-                  </p>
-                </Panel>
-              </div>
-              <Note>
-                Карта показывает реальные удары, а не все потенциальные моменты.{" "}
-                {a.coordinate_note}
-              </Note>
+                    {[
+                      ["Передачи", n(own.passes, 0), n(opp.passes, 0)],
+                      [
+                        "Завершённые",
+                        n(own.completed_passes, 0),
+                        n(opp.completed_passes, 0),
+                      ],
+                      [
+                        "Точность",
+                        pct(own.pass_accuracy),
+                        pct(opp.pass_accuracy),
+                      ],
+                      [
+                        "Прогрессивные",
+                        n(own.progressive_passes, 0),
+                        n(opp.progressive_passes, 0),
+                      ],
+                      [
+                        "Защитные события",
+                        n(own.defensive_events, 0),
+                        n(opp.defensive_events, 0),
+                      ],
+                      [
+                        "Возвраты мяча",
+                        n(own.ball_recoveries, 0),
+                        n(opp.ball_recoveries, 0),
+                      ],
+                    ].map(([label, v, w]) => (
+                      <div key={label} className="stat-comparison-row">
+                        <span>{label}</span>
+                        <b>{v}</b>
+                        <b>{w}</b>
+                      </div>
+                    ))}
+                    <p className="chart-note">
+                      Защитные события — единоборства, перехваты, блоки и
+                      выносы. Их число не измеряет компактность или
+                      эффективность прессинга.
+                    </p>
+                  </Panel>
+                </div>
+                <Note>
+                  Карта показывает реальные удары, а не все потенциальные
+                  моменты. {a.coordinate_note}
+                </Note>
+              </ResearchDetails>
               <div className="action-row">
                 <Action onClick={() => ctx.go("/advisor", matchPatch)}>
                   Показать рекомендации
@@ -384,7 +419,7 @@ export default function MatchesPage() {
                   secondary
                   onClick={() => ctx.go("/prediction", matchPatch)}
                 >
-                  Проверить прогноз
+                  Открыть контекст прогноза
                 </Action>
               </div>
             </>

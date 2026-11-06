@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import {
   ResponsiveContainer,
   CartesianGrid,
@@ -25,25 +25,25 @@ import type { MatchAnalysis, Opponents, Shot } from "./types";
 import { clubName, metricName, n } from "./format";
 import { useApp } from "./context";
 
-export const BLUE = "#45b2ff",
+export const BLUE = "#2878e8",
   CYAN = "#72d4ee",
-  MINT = "#39c9aa",
-  AMBER = "#f2b85c",
-  RED = "#f18493";
+  MINT = "#139782",
+  AMBER = "#c48b24",
+  RED = "#ad6173";
 const colors = [BLUE, AMBER, MINT, RED, CYAN];
-const grid = { stroke: "#324d65", strokeDasharray: "3 5", vertical: false };
+const grid = { stroke: "#dce5ef", strokeDasharray: "3 5", vertical: false };
 const axis = {
-  stroke: "#93adc5",
-  fontSize: 11,
+  stroke: "#52677c",
+  fontSize: 14,
   tickLine: false,
   axisLine: false,
 };
 const tooltipStyle = {
-  background: "#132d46",
-  border: "1px solid #46647e",
+  background: "#ffffff",
+  border: "1px solid #cadbea",
   borderRadius: 10,
-  color: "#f0f7ff",
-  fontSize: 12,
+  color: "#1b3048",
+  fontSize: 14,
   boxShadow: "0 8px 30px #06132499",
 };
 export function Chart({
@@ -96,7 +96,7 @@ export function TrendChart({
         <Legend
           iconType="circle"
           iconSize={7}
-          wrapperStyle={{ fontSize: 11, paddingTop: 12 }}
+          wrapperStyle={{ fontSize: 14, paddingTop: 12 }}
         />
         {lines.map((l) => (
           <Line
@@ -117,9 +117,10 @@ export function ComparisonChart({
   data,
   bars,
   x = "label",
-  height = 240,
+  height,
   horizontal = false,
   reference,
+  valueFormatter = (v: number) => n(v, 2),
 }: {
   data: object[];
   bars: { key: string; name: string; color: string }[];
@@ -127,9 +128,17 @@ export function ComparisonChart({
   height?: number;
   horizontal?: boolean;
   reference?: number;
+  valueFormatter?: (v: number) => string;
 }) {
   return (
-    <Chart height={height} label={bars.map((b) => b.name).join(", ")}>
+    <Chart
+      height={
+        horizontal
+          ? Math.min(height ?? 360, Math.max(150, data.length * 42 + 65))
+          : (height ?? 230)
+      }
+      label={bars.map((b) => b.name).join(", ")}
+    >
       <BarChart
         data={data}
         layout={horizontal ? "vertical" : "horizontal"}
@@ -142,13 +151,14 @@ export function ComparisonChart({
             <XAxis
               {...axis}
               type="number"
-              tickFormatter={(v: number) => n(v, Number.isInteger(v) ? 0 : 2)}
+              tickFormatter={valueFormatter}
             />
             <YAxis
               {...axis}
               type="category"
               dataKey={x}
-              width={132}
+              width={175}
+              interval={0}
               tickFormatter={(value: string) =>
                 value.length > 23 ? value.slice(0, 22) + "…" : value
               }
@@ -160,23 +170,23 @@ export function ComparisonChart({
               {...axis}
               dataKey={x}
               interval={0}
-              tick={{ fontSize: 11, fill: "#9eb7cc" }}
+              tick={{ fontSize: 14, fill: "#52677c" }}
             />
             <YAxis
               {...axis}
-              tickFormatter={(v: number) => n(v, Number.isInteger(v) ? 0 : 2)}
+              tickFormatter={valueFormatter}
             />
           </>
         )}
         <Tooltip
           cursor={{ fill: "#68c9ff0b" }}
           contentStyle={tooltipStyle}
-          formatter={(v: number, name: string) => [n(v, 2), name]}
+          formatter={(v: number, name: string) => [valueFormatter(v), name]}
         />
         <Legend
           iconType="circle"
           iconSize={7}
-          wrapperStyle={{ fontSize: 11, paddingTop: 12 }}
+          wrapperStyle={{ fontSize: 14, paddingTop: 12 }}
         />
         {reference != null &&
           (horizontal ? (
@@ -204,12 +214,12 @@ export function StyleRadar({ value }: { value: Opponents }) {
     label: metricName[r.metric] ?? r.metric,
   }));
   return (
-    <Chart label="Нормированный профиль клуба и соперника" height={300}>
+    <Chart label="Нормированный профиль клуба и соперника" height={330}>
       <RadarChart data={data} outerRadius="68%">
         <PolarGrid stroke="#37546b" />
         <PolarAngleAxis
           dataKey="label"
-          tick={{ fontSize: 10, fill: "#b4cadc" }}
+          tick={{ fontSize: 14, fill: "#52677c" }}
         />
         <PolarRadiusAxis
           angle={90}
@@ -238,7 +248,7 @@ export function StyleRadar({ value }: { value: Opponents }) {
         <Legend
           iconType="circle"
           iconSize={7}
-          wrapperStyle={{ fontSize: 11 }}
+          wrapperStyle={{ fontSize: 14 }}
         />
       </RadarChart>
     </Chart>
@@ -247,7 +257,7 @@ export function StyleRadar({ value }: { value: Opponents }) {
 export function ClusterScatter({ value }: { value: Opponents }) {
   const { clubs, selectedClubId, selectedOpponentId, setOpponent } = useApp();
   return (
-    <Chart label="Кластеры клубов: передачи и удары за матч" height={300}>
+    <Chart label="Кластеры клубов: передачи и удары за матч" height={330}>
       <ScatterChart margin={{ top: 15, right: 15, left: -15, bottom: 10 }}>
         <CartesianGrid {...grid} />
         <XAxis
@@ -260,8 +270,8 @@ export function ClusterScatter({ value }: { value: Opponents }) {
             value: "Передачи за матч",
             position: "insideBottom",
             offset: -6,
-            fill: "#9eb7cc",
-            fontSize: 11,
+            fill: "#52677c",
+            fontSize: 14,
           }}
         />
         <YAxis
@@ -327,7 +337,7 @@ export function ClusterScatter({ value }: { value: Opponents }) {
         <Legend
           iconType="circle"
           iconSize={7}
-          wrapperStyle={{ fontSize: 11, paddingTop: 15 }}
+          wrapperStyle={{ fontSize: 14, paddingTop: 15 }}
         />
       </ScatterChart>
     </Chart>
@@ -337,13 +347,27 @@ export function ClusterScatter({ value }: { value: Opponents }) {
 export function ShotPitch({ analysis }: { analysis: MatchAnalysis }) {
   const [shown, setShown] = useState("both");
   const [hover, setHover] = useState<Shot | null>(null);
+  useEffect(() => {
+    setHover(null);
+    setShown("both");
+  }, [analysis.match.match_id]);
   const own = analysis.teams.find((t) => t.team_id === analysis.team.team_id)!,
     opp = analysis.teams.find((t) => t.team_id !== analysis.team.team_id)!;
   const shots = analysis.shots.filter(
     (s) =>
       s.x != null &&
       s.y != null &&
-      (shown === "both" || (shown === "team") === s.is_selected_team),
+      (shown === "both" ||
+        (shown === "team" && s.is_selected_team) ||
+        (shown === "opponent" && !s.is_selected_team) ||
+        (shown === "dangerous" &&
+          analysis.visuals.coaching.dangerous_event_ids.includes(s.event_id)) ||
+        (shown === "central" &&
+          analysis.visuals.coaching.central_event_ids.includes(s.event_id)) ||
+        (shown === "low" &&
+          analysis.visuals.coaching.low_quality_event_ids.includes(
+            s.event_id,
+          ))),
   );
   return (
     <div className="pitch-module">
@@ -353,6 +377,9 @@ export function ShotPitch({ analysis }: { analysis: MatchAnalysis }) {
             ["both", "Все удары"],
             ["team", "Команда"],
             ["opponent", "Соперник"],
+            ["dangerous", "Опасные допущенные"],
+            ["central", "Допущенные из центра"],
+            ["low", "Свои с низким xG"],
           ].map(([id, label]) => (
             <button
               key={id}
@@ -366,7 +393,13 @@ export function ShotPitch({ analysis }: { analysis: MatchAnalysis }) {
             </button>
           ))}
         </div>
-        <span className="tiny">Площадь маркера ∝ xG</span>
+        <span className="tiny">
+          Крупнее маркер — выше xG · низкий xG &lt; 0,05
+        </span>
+      </div>
+      <div className="pitch-direction">
+        <span>{clubName(opp.name)} ←</span>
+        <span>→ {clubName(own.name)}</span>
       </div>
       <div className="pitch-wrap">
         <svg
@@ -409,17 +442,11 @@ export function ShotPitch({ analysis }: { analysis: MatchAnalysis }) {
             <circle cx="108" cy="40" r=".45" fill="#7ba1b4" />
             <path d="M0 36h-2v8h2 M120 36h2v8h-2" />
           </g>
-          <text x="1" y="-3" className="pitch-text">
-            {clubName(opp.name)} ←
-          </text>
-          <text x="119" y="-3" textAnchor="end" className="pitch-text">
-            → {clubName(own.name)}
-          </text>
           {shots.map((s) => {
             const x = s.is_selected_team ? s.x! : 120 - s.x!,
               y = s.is_selected_team ? s.y! : 80 - s.y!;
             const radius = 0.7 + Math.sqrt(s.xg ?? 0) * 3.7;
-            const color = s.is_selected_team ? BLUE : AMBER;
+            const color = s.is_selected_team ? "#50c5ff" : "#ffce7d";
             const description = `${s.minute}′ · ${s.player_name} · ${clubName(s.is_selected_team ? own.name : opp.name)} · ${s.outcome_label} · xG ${n(s.xg, 3)}`;
             return (
               <g

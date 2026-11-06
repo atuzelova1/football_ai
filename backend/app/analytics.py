@@ -10,6 +10,7 @@ from app.data import (frame,query,club,clean,connection,put_meta,get_meta,eviden
                       METRIC_LABELS,RESULT_LABELS,LIMITATIONS)
 from app.simulator import goal_probabilities
 from app.visuals import season_visuals, match_visuals
+from app.coaching import team_snapshot, match_snapshot
 
 
 def aggregate(g):
@@ -51,7 +52,7 @@ def overview(team_id):
         window=g.iloc[max(0,i-4):i+1]
         rolling.append({'match_id':int(row.match_id),'match_date':row.match_date,
                         'window_matches':len(window),**{k:window[k].mean() for k in ['xg','xga','xgd','points']}})
-    return clean({'team':selected,'season':'2015/2016','summary':aggregate(g),
+    return clean({'team':selected,'season':'2015/2016','summary':aggregate(g),'coaching':team_snapshot(team_id,df),
         'visuals':season_visuals(g,df[df.team_id!=team_id]),
         'home_away':[{'label':'Дома' if h else 'В гостях','is_home':bool(h),'summary':aggregate(g[g.is_home==h])} for h in (1,0)],
         'recent_form':g.tail(5).assign(result_label=lambda x:x.result.map(RESULT_LABELS)).to_dict('records'),
@@ -244,9 +245,11 @@ def match_analysis(match_id,team_id):
         s['player_name']=players.get(s['player_id'],'Игрок не указан')
     patterns=query('SELECT * FROM pass_patterns WHERE match_id=?',(match_id,))
     match=query('SELECT * FROM matches WHERE match_id=?',(match_id,))[0]; quality=json.loads(match.pop('quality'))
+    visuals=match_visuals(shots,rows,patterns,team_id)
+    visuals['coaching']=match_snapshot(rows,shots,team_id)
     return clean({'match':match,'team':club(team_id),'teams':[{**r,'name':club(r['team_id'])['name'],
         'result_label':RESULT_LABELS[r['result']]} for r in rows], 'shots':shots,
-        'pass_patterns':patterns,'visuals':match_visuals(shots,rows,patterns,team_id),
+        'pass_patterns':patterns,'visuals':visuals,
         'lineups':[{**r,'positions':json.loads(r['positions'])} for r in query('SELECT * FROM lineups WHERE match_id=?',(match_id,))],
         'quality':quality,'evidence_id':f'match:{match_id}:team:{team_id}',
         'coordinate_note':'Поле 120 × 80. Все удары направлены к x=120 в системе атакующей команды; при общей карте соперника нужно отразить.',

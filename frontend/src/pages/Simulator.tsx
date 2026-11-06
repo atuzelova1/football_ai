@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { SavedScenarios } from "../savedScenarios";
 import {
   ArrowRight,
   Check,
@@ -17,13 +18,14 @@ import {
   Empty,
   ErrorState,
   Kpi,
+  InfoHint,
   Loading,
-  Note,
   OpponentSelect,
   PageTitle,
   Panel,
   PlanningControls,
   ProbabilityBars,
+  ResearchDetails,
 } from "../components";
 import { AMBER, BLUE, MINT, ComparisonChart, TrendChart } from "../charts";
 import { clubName, date, metricName, n, pct, signed } from "../format";
@@ -70,36 +72,43 @@ export const defaults: TacticalScenario[] = [
     xga_reduction: 0.1,
   },
 ];
-export default function SimulatorPage() {
+export default function SimulatorPage({
+  embedded = false,
+}: { embedded?: boolean } = {}) {
   const ctx = useApp();
-  const current = ctx.currentTacticalScenario ?? defaults[1];
-  const [draft, setDraft] = useState<TacticalScenario>(current),
-    [scenario, setScenario] = useState<TacticalScenario>(current);
+  const [comparison, setComparison] = useState<TacticalScenario | null>(null);
+  const draft = ctx.currentTacticalScenario ?? defaults[1];
+  const [scenario, setScenario] = useState<TacticalScenario>(draft);
+  const setDraft = (next: TacticalScenario) =>
+    ctx.update({ currentTacticalScenario: next });
   const [customMode, setCustomMode] = useState<"direct" | "shots">(
-    current.attack_xg_change ? "direct" : "shots",
+    draft.attack_xg_change ? "direct" : "shots",
   );
   useEffect(() => {
-    const next = ctx.currentTacticalScenario ?? defaults[1];
-    setDraft(next);
-    setScenario(next);
-    setCustomMode(next.attack_xg_change ? "direct" : "shots");
+    if (draft.attack_xg_change) setCustomMode("direct");
+    else if (draft.shot_volume_change || draft.shot_quality_change) setCustomMode("shots");
   }, [
     ctx.selectedClubId,
     ctx.selectedOpponentId,
     ctx.currentTacticalScenario?.id,
+    ctx.currentTacticalScenario?.shot_volume_change,
+    ctx.currentTacticalScenario?.shot_quality_change,
+    ctx.currentTacticalScenario?.attack_xg_change,
+    ctx.currentTacticalScenario?.xga_reduction,
   ]);
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setScenario(draft);
-      ctx.update({ currentTacticalScenario: draft });
     }, 300);
     return () => window.clearTimeout(timeout);
-  }, [draft]);
+  }, [JSON.stringify(draft)]);
   const alternatives = defaults
     .filter((s) => s.id !== "custom")
     .map((s) => (s.id === scenario.id ? scenario : s));
   if (scenario.id === "custom") alternatives.push(scenario);
+  if (comparison) alternatives.push(comparison);
   const asOf = ctx.selectedHistoricalMatchContext?.date;
+  useEffect(() => setComparison(null), [ctx.selectedClubId, ctx.selectedOpponentId, ctx.isHome, asOf]);
   const body = {
     team_id: ctx.selectedClubId,
     opponent_id: ctx.selectedOpponentId,
@@ -113,10 +122,14 @@ export default function SimulatorPage() {
   const api = useApi<Simulation>(
     "/api/simulation",
     body,
-    !!ctx.selectedOpponentId,
+    !!ctx.selectedOpponentId &&
+      JSON.stringify(draft) === JSON.stringify(scenario),
+    { retainKey: JSON.stringify([ctx.selectedClubId,ctx.selectedOpponentId,ctx.isHome,asOf,ctx.priority,ctx.maxInterventions,ctx.priorityStrength]) },
   );
-  const result = api.data,
-    selected = result?.scenarios.find((s) => s.id === scenario.id);
+  const result = api.data ?? api.previousData,
+    selected = result?.scenarios.find((s) => s.id === draft.id);
+  const updating = !!ctx.selectedOpponentId && (JSON.stringify(draft) !== JSON.stringify(scenario) || api.loading);
+  const previous = !!result && !api.data;
   const setValue = (
     key: keyof Pick<
       TacticalScenario,
@@ -126,34 +139,44 @@ export default function SimulatorPage() {
       | "xga_reduction"
     >,
     value: number,
-  ) => setDraft((s) => ({ ...s, [key]: value }));
+  ) => {
+    const next = { ...draft, [key]: value };
+    setDraft(next);
+  };
   const choose = (s: TacticalScenario) => {
     setDraft(s);
     setCustomMode(s.attack_xg_change ? "direct" : "shots");
-    ctx.update({ currentTacticalScenario: s });
   };
   return (
     <>
-      <PageTitle
-        eyebrow="05 / Симулятор · Уровень 3"
-        title="Сначала проверить. Потом менять."
-        description="Сравните тактические альтернативы на реальной исторической базе и выберите приоритет штаба."
-      />
-      <div className="context-toolbar simulator-toolbar">
-        <OpponentSelect />
-        <PlanningControls />
-      </div>
+      {!embedded && (
+        <PageTitle
+          eyebrow="05 / Симулятор · Уровень 3"
+          title="Сначала проверить. Потом менять."
+          description="Сравните тактические альтернативы на реальной исторической базе и выберите приоритет штаба."
+        />
+      )}
+      {!embedded && (
+        <div className="context-toolbar simulator-toolbar">
+          <OpponentSelect />
+          <PlanningControls />
+        </div>
+      )}
       {asOf && (
-        <Note>
-          Предматчевая база до {date(asOf)}. Она использует только более ранние
-          матчи.{" "}
+        <div className="context-help">
+          <span>База до {date(asOf)} <InfoHint label="О предматчевой базе" text="Используются только матчи до выбранной даты. Полный сезон доступен отдельно как ретроспектива." /></span>
           <button
             className="inline-link"
-            onClick={() => ctx.update({ selectedHistoricalMatchContext: null })}
+            onClick={() =>
+              ctx.update({
+                selectedHistoricalMatchContext: null,
+                selectedMatchId: null,
+              })
+            }
           >
             Перейти к ретроспективной базе полного сезона
           </button>
-        </Note>
+        </div>
       )}
       <div className="simulation-layout">
         <div className="scenario-editor">
@@ -194,12 +217,13 @@ export default function SimulatorPage() {
                     onChange={(e) => {
                       const mode = e.target.value as typeof customMode;
                       setCustomMode(mode);
-                      setDraft((s) => ({
-                        ...s,
+                      const next = {
+                        ...draft,
                         attack_xg_change: 0,
                         shot_volume_change: 0,
                         shot_quality_change: 0,
-                      }));
+                      };
+                      setDraft(next);
                     }}
                   >
                     <option value="direct">
@@ -247,23 +271,21 @@ export default function SimulatorPage() {
                 />
               )}
             </div>
-            <Note warning>
-              Ползунки задают предположения. Они не доказывают, что конкретная
-              тренировка даст такой эффект.
-            </Note>
           </Panel>
         </div>
-        <div className="scenario-output">
-          {api.error ? (
-            <ErrorState error={api.error} retry={api.retry} />
-          ) : !result || !selected ? (
-            <Loading />
+        <div className="scenario-output" aria-busy={updating}>
+          {api.error && <ErrorState compact error={api.error} retry={api.retry} />}
+          {updating && <Loading compact label="Пересчитываем сценарий…" />}
+          {previous && <p className="calculation-note">{api.error ? "Показан предыдущий расчёт. Новые параметры не применены." : "Показан предыдущий расчёт до завершения обновления."}</p>}
+          {!result || !selected ? (
+            api.data ? <ErrorState compact error="Сервер не вернул выбранный сценарий." retry={api.retry} /> : !updating && !api.error ? <p className="calculation-note">Выберите соперника и сценарий для расчёта.</p> : null
           ) : (
             <>
               <Panel
+                className="light-surface scenario-result"
                 title="Что меняется в модели"
                 subtitle={`${clubName(ctx.club!.name)} — ${clubName(ctx.opponent!.name)} · ${ctx.isHome ? "дома" : "в гостях"}`}
-                action={<span className="pill pill-mint">Расчёт Пуассона</span>}
+                action={<span className="compact-context"><span className="pill pill-mint">Расчёт Пуассона</span><InfoHint label="Как понимать модельный эффект" text="Ожидаемые очки и вероятности рассчитаны при заданных допущениях. Это модельный результат, а не гарантированный эффект тактической инструкции." /></span>}
               >
                 <div className="baseline-vs" data-team-id={result.team_id}>
                   <div>
@@ -299,6 +321,13 @@ export default function SimulatorPage() {
                   </b>
                   <small>за один модельный матч</small>
                 </div>
+                <p className="scenario-assumptions">
+                  Допущение:{" "}
+                  {Object.entries(selected.assumptions)
+                    .filter(([, v]) => v !== 0)
+                    .map(([k, v]) => `${metricName[k]} ${signed(v * 100, 0)}%`)
+                    .join(" · ") || "Без изменений"}
+                </p>
                 <ProbabilityBars value={selected.probabilities} />
                 <details className="baseline-details">
                   <summary>Вероятности базового сценария</summary>
@@ -308,30 +337,33 @@ export default function SimulatorPage() {
                   />
                 </details>
               </Panel>
-              <Panel
-                title="Чувствительность к допущению"
-                subtitle="Половина, исходный размер и полуторное изменение"
-              >
-                <ComparisonChart
-                  height={205}
-                  data={selected.sensitivity.map((s) => ({
-                    label: `×${n(s.assumption_factor, 1)}`,
-                    points: s.expected_points,
-                  }))}
-                  bars={[
-                    { key: "points", name: "Ожидаемые очки", color: BLUE },
-                  ]}
-                  reference={result.baseline.probabilities.expected_points}
-                />
-                <p className="chart-note">
-                  {selected.uncertainty} При достижении предела изменение
-                  ограничено ±50%.
-                </p>
-              </Panel>
+              <ResearchDetails title="Чувствительность к допущению">
+                <Panel
+                  title="Ожидаемые очки при разных допущениях"
+                  subtitle="Половина, исходный размер и полуторное изменение"
+                >
+                  <ComparisonChart
+                    height={205}
+                    data={selected.sensitivity.map((s) => ({
+                      label: `×${n(s.assumption_factor, 1)}`,
+                      points: s.expected_points,
+                    }))}
+                    bars={[
+                      { key: "points", name: "Ожидаемые очки", color: BLUE },
+                    ]}
+                    reference={result.baseline.probabilities.expected_points}
+                  />
+                  <p className="chart-note">
+                    {selected.uncertainty} При достижении предела изменение
+                    ограничено ±50%.
+                  </p>
+                </Panel>
+              </ResearchDetails>
             </>
           )}
         </div>
       </div>
+      <SavedScenarios scenario={draft} onCompare={setComparison} />
       {result && (
         <>
           <Panel
@@ -342,13 +374,21 @@ export default function SimulatorPage() {
               {result.scenarios.map((s) => (
                 <button
                   key={s.id}
-                  className={`scenario-compare-card ${s.id === scenario.id ? "selected" : ""} ${!s.eligible ? "ineligible" : ""}`}
+                  className={`scenario-compare-card ${s.id === draft.id ? "selected" : ""} ${!s.eligible ? "ineligible" : ""}`}
                   onClick={() =>
-                    choose(alternatives.find((a) => a.id === s.id)!)
+                    choose(
+                      s.id === "saved"
+                        ? {
+                            ...alternatives.find((a) => a.id === s.id)!,
+                            id: "custom",
+                            title: "Свой сценарий",
+                          }
+                        : alternatives.find((a) => a.id === s.id)!,
+                    )
                   }
                 >
                   <span className="eyebrow">
-                    {s.id === scenario.id
+                    {s.id === draft.id
                       ? "Выбранный сценарий"
                       : `${s.interventions} направл. работы`}
                   </span>
@@ -369,73 +409,72 @@ export default function SimulatorPage() {
                 </button>
               ))}
             </div>
-            <p className="chart-note">
-              {result.planning.score_definition} Варианты упорядочены по этому
-              баллу; ограничение ресурса — плановое допущение пользователя.
-            </p>
           </Panel>
-          <Panel
-            title="База против тактических альтернатив"
-            subtitle="Ожидаемые очки за модельный матч"
-          >
-            <ComparisonChart
-              horizontal
-              height={280}
-              data={[
-                {
-                  label: "База",
-                  points: result.baseline.probabilities.expected_points,
-                },
-                ...result.scenarios.map((s) => ({
-                  label: s.title,
-                  points: s.probabilities.expected_points,
-                })),
-              ]}
-              bars={[{ key: "points", name: "Ожидаемые очки", color: BLUE }]}
-            />
-          </Panel>
-          <Disclosure title="Наблюдаемая база, формула и неопределённость">
-            <p>{result.baseline.method}</p>
-            <p>
-              Матчей клуба: {result.baseline.sample_size}; соперника:{" "}
-              {result.baseline.opponent_sample_size}. {result.baseline.mode}.
-            </p>
-            <p>
-              95% интервал среднего базового xG: [
-              {n(result.baseline.confidence_intervals.attack_xg[0], 2)};{" "}
-              {n(result.baseline.confidence_intervals.attack_xg[1], 2)}].
-            </p>
-            <p>
-              95% интервал базовых ожидаемых очков: [
-              {n(result.baseline.confidence_intervals.expected_points[0], 2)};{" "}
-              {n(result.baseline.confidence_intervals.expected_points[1], 2)}].
-            </p>
-            <p>{result.baseline.uncertainty}</p>
-            <p>
-              Атакующий xG = исходный xG × (1 + изменение объёма) × (1 +
-              изменение качества), либо один прямой множитель xG. Эти режимы
-              взаимоисключающие. Ожидаемые очки = 3P(победа) + P(ничья).
-            </p>
-            {result.limitations.map((t) => (
-              <p key={t}>{t}</p>
-            ))}
-          </Disclosure>
+          <ResearchDetails title="Как рассчитано: сравнение и формулы">
+            <Panel
+              title="База против тактических альтернатив"
+              subtitle="Ожидаемые очки за модельный матч"
+            >
+              <ComparisonChart
+                horizontal
+                height={280}
+                data={[
+                  {
+                    label: "База",
+                    points: result.baseline.probabilities.expected_points,
+                  },
+                  ...result.scenarios.map((s) => ({
+                    label: s.title,
+                    points: s.probabilities.expected_points,
+                  })),
+                ]}
+                bars={[{ key: "points", name: "Ожидаемые очки", color: BLUE }]}
+              />
+            </Panel>
+            <Disclosure title="Наблюдаемая база, формула и неопределённость">
+              <p>{result.baseline.method}</p>
+              <p>
+                Матчей клуба: {result.baseline.sample_size}; соперника:{" "}
+                {result.baseline.opponent_sample_size}. {result.baseline.mode}.
+              </p>
+              <p>
+                95% интервал среднего базового xG: [
+                {n(result.baseline.confidence_intervals.attack_xg[0], 2)};{" "}
+                {n(result.baseline.confidence_intervals.attack_xg[1], 2)}].
+              </p>
+              <p>
+                95% интервал базовых ожидаемых очков: [
+                {n(result.baseline.confidence_intervals.expected_points[0], 2)};{" "}
+                {n(result.baseline.confidence_intervals.expected_points[1], 2)}
+                ].
+              </p>
+              <p>{result.baseline.uncertainty}</p>
+              <p>
+                Атакующий xG = исходный xG × (1 + изменение объёма) × (1 +
+                изменение качества), либо один прямой множитель xG. Эти режимы
+                взаимоисключающие. Ожидаемые очки = 3P(победа) + P(ничья).
+              </p>
+              {result.limitations.map((t) => (
+                <p key={t}>{t}</p>
+              ))}
+            </Disclosure>
+          </ResearchDetails>
           <div className="next-step horizontal">
             <div>
               <div className="eyebrow">Следующий шаг / AI-советник</div>
-              <h2>Связать сценарий с реальной проблемой</h2>
+              <h2>Выбрать эксперимент для штаба</h2>
               <p>
                 Советник получит выбранные команды, ресурс, приоритет и точные
                 значения текущего сценария.
               </p>
             </div>
             <Action
-              disabled={!selected?.eligible}
+              disabled={updating || !!api.error || !api.data || !selected?.eligible}
               onClick={() =>
                 ctx.go("/advisor", { currentTacticalScenario: scenario })
               }
             >
-              Использовать этот сценарий в AI-советнике
+              Перейти к рекомендации
             </Action>
           </div>
         </>

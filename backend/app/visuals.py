@@ -1,6 +1,7 @@
 """Ряды визуализаций: Python рассчитывает, React только рисует."""
 from collections import defaultdict
 from app.data import clean
+from app.coaching import match_xg_comparison, ru
 
 
 def season_visuals(g, other):
@@ -45,10 +46,9 @@ def match_visuals(shots, teams, patterns, team_id):
             matrix.append({'start_zone':a,'end_zone':b,'attempts':p['attempts'] if p else 0,
                            'completed':p['completed'] if p else 0})
     t=next(t for t in teams if t['team_id']==team_id)
-    interpretation=(f'Команда набрала {t["points"]:.0f} очк.; xG {t["xg"]:.2f}, xGA {t["xga"]:.2f}, '
+    interpretation=(f'Команда набрала {t["points"]:.0f} очк.; xG {ru(t["xg"])}, xGA {ru(t["xga"])}, '
         f'удары {t["shots"]:.0f}:{t["shots_against"]:.0f}. '
-        + ('По качеству созданных моментов преимущество было у выбранного клуба. ' if t['xgd']>0 else
-           'По качеству созданных моментов преимущество было у соперника. ' if t['xgd']<0 else 'Разница xG равна нулю. ')
+        + match_xg_comparison(t['xg'],t['xga'])['issue']+' '
         + 'Сравнение помогает выбрать эпизоды для видеоразбора; оно не доказывает причину результата.')
     return clean({'xg_timeline':timeline,'quality_distribution':bins,'attack_zones':zones,
                   'passing_matrix':matrix,'interpretation':interpretation})

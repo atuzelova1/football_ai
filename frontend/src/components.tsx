@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowUpRight,
   ArrowRight,
@@ -13,7 +14,7 @@ import {
   Layers3,
 } from "lucide-react";
 import type { Evidence, Probabilities, TeamMatch } from "./types";
-import { clubName, date, n, pct, resultName, resultShort } from "./format";
+import { clubName, date, n, pct, metricValue, resultName, resultShort } from "./format";
 import { useApp } from "./context";
 
 export function Panel({
@@ -109,7 +110,9 @@ export function Kpi({
   return (
     <div className={`kpi tone-${tone}`}>
       <div className="kpi-top">
-        <span>{label}</span>
+        <span>
+          {label} <MetricHelp label={label} />
+        </span>
         {icon}
       </div>
       <strong>{value}</strong>
@@ -132,7 +135,74 @@ export function Empty({
     </div>
   );
 }
-export function Loading() {
+
+const metricHelp: Record<string, string> = {
+  "Созданный xG":
+    "Оценка качества созданных ударов: чем выше значение, тем опаснее были моменты.",
+  "Допущенный xGA":
+    "Сумма xG ударов соперников. Меньше — обычно предпочтительнее.",
+  "Разница xG":
+    "Созданный xG минус допущенный xGA. Это показатель моментов, а не фактических очков.",
+  "Качество удара":
+    "Средняя оценка вероятности гола с одного удара. Сезонная карточка использует отношение сумм.",
+  "Удары за матч":
+    "Количество ударов не определяет их опасность. Сопоставляйте с xG одного удара.",
+  "Недобор очков":
+    "3 × число матчей минус набранные очки. Это недобор до максимума, а не очки, упущенные после выхода вперёд.",
+  "Ожидаемые очки":
+    "Математическое ожидание очков по модели, а не гарантированный результат.",
+};
+function MetricHelp({ label }: { label: string }) {
+  const text = metricHelp[label];
+  return text ? (
+    <span className="metric-help" tabIndex={0} aria-label={`${label}: ${text}`}>
+      ⓘ<span role="tooltip">{text}</span>
+    </span>
+  ) : null;
+}
+
+export function ResearchDetails({
+  children,
+  title = "Подробнее об исследовании",
+}: {
+  children: ReactNode;
+  title?: string;
+}) {
+  return (
+    <details className="research-details">
+      <summary>
+        <FlaskConical size={17} />
+        <span>{title}</span>
+        <span className="research-expand">Раскрыть</span>
+      </summary>
+      <div className="research-body">{children}</div>
+    </details>
+  );
+}
+export function InfoHint({ label, text }: { label: string; text: string }) {
+  const id = useId();
+  const ref = useRef<HTMLButtonElement>(null);
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  const show = () => {
+    const rect = ref.current?.getBoundingClientRect();
+    if (rect) setPosition({ left: Math.max(16, Math.min(rect.left, window.innerWidth - 336)), top: Math.max(16, Math.min(rect.bottom + 8, window.innerHeight - 160)) });
+  };
+  useEffect(() => {
+    if (!position) return;
+    const close = (event: PointerEvent) => { if (!ref.current?.contains(event.target as Node)) setPosition(null); };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [!!position]);
+  return <>
+    <button type="button" ref={ref} className="info-hint" aria-label={label} aria-describedby={position ? id : undefined}
+      onMouseEnter={show} onMouseLeave={() => setPosition(null)} onFocus={show} onBlur={() => setPosition(null)}
+      onClick={show} onKeyDown={e => { if (e.key === "Escape") setPosition(null); }}><Info size={16} /></button>
+    {position && createPortal(<span role="tooltip" id={id} className="info-hint-tooltip" style={position}>{text}</span>, document.body)}
+  </>;
+}
+
+export function Loading({ compact = false, label = "Обновляем данные…" }: { compact?: boolean; label?: string } = {}) {
+  if (compact) return <div className="loading-inline" role="status"><RefreshCw size={16} /><span>{label}</span></div>;
   return (
     <div className="loading-grid" role="status" aria-label="Загрузка данных">
       <div className="skeleton wide" />
@@ -146,10 +216,13 @@ export function Loading() {
 export function ErrorState({
   error,
   retry,
+  compact = false,
 }: {
   error: string;
   retry: () => void;
+  compact?: boolean;
 }) {
+  if (compact) return <div role="alert" className="error-inline"><TriangleAlert size={18} /><p>{error}</p><button type="button" className="text-button" onClick={retry}><RefreshCw size={15} />Повторить</button></div>;
   return (
     <div role="alert" className="error-state">
       <TriangleAlert />
@@ -259,59 +332,25 @@ export function EvidenceCard({
   evidence: Evidence;
   compact?: boolean;
 }) {
-  const { showEvidence, go, matches } = useApp();
-  const supportingMatch = matches?.find((m) =>
-    evidence.match_ids.includes(m.match_id),
-  );
-  const percent = [
-    "pass_accuracy",
-    "pass_share",
-    "central_xga_share",
-    "shot_quality",
-  ].includes(evidence.metric);
-  const format = (v: number | null) =>
-    percent && evidence.metric !== "shot_quality"
-      ? pct(v)
-      : n(v, evidence.metric === "shot_quality" ? 3 : 2);
+  const { showEvidence } = useApp();
+  const format = (v: number | null) => metricValue(evidence.metric,v);
   return (
     <div
       className={`evidence-card ${compact ? "compact" : ""}`}
       id={evidence.id}
     >
-      <div className="evidence-caption">
-        <Database size={14} />
-        <span>{evidence.kind}</span>
-      </div>
       <h3>{evidence.label}</h3>
       <div className="evidence-value">
         {format(evidence.value)}
         <span>ориентир {format(evidence.benchmark)}</span>
       </div>
-      {!compact && <p>{evidence.note}</p>}
       <div className="evidence-footer">
         <span>{evidence.match_ids.length} матчей</span>
+        {!compact && <InfoHint label="О сравнении показателя" text={evidence.note} />}
         <button onClick={() => showEvidence(evidence)}>
           Показать доказательства <ArrowUpRight size={13} />
         </button>
       </div>
-      {!compact && (
-        <button
-          className="text-button mt-3"
-          disabled={!supportingMatch}
-          onClick={() =>
-            supportingMatch &&
-            go("/matches", {
-              selectedMatchId: supportingMatch.match_id,
-              selectedOpponentId: supportingMatch.opponent_id,
-              isHome: !!supportingMatch.is_home,
-              selectedHistoricalMatchContext: null,
-              selectedResearchEvidence: evidence,
-            })
-          }
-        >
-          Показать матч-доказательство <ArrowRight size={14} />
-        </button>
-      )}
     </div>
   );
 }
@@ -391,6 +430,7 @@ export function PlanningControls() {
           onChange={(e) =>
             update({
               isHome: e.target.value === "home",
+              selectedMatchId: null,
               selectedHistoricalMatchContext: null,
             })
           }
@@ -399,43 +439,56 @@ export function PlanningControls() {
           <option value="away">В гостях</option>
         </select>
       </label>
-      <label className="field">
-        Приоритет
-        <select
-          aria-label="Приоритет тренера"
-          value={priority}
-          onChange={(e) =>
-            update({ priority: e.target.value as typeof priority })
-          }
-        >
-          <option value="balanced">Баланс</option>
-          <option value="attack">Атака</option>
-          <option value="defense">Защита</option>
-        </select>
-      </label>
-      <label className="field">
-        Ресурс штаба
-        <select
-          aria-label="Число вмешательств"
-          value={maxInterventions}
-          onChange={(e) => update({ maxInterventions: Number(e.target.value) })}
-        >
-          <option value="1">Одно направление</option>
-          <option value="2">До двух направлений</option>
-        </select>
-      </label>
-      <label className="field range-field">
-        Вес приоритета <b>{pct(priorityStrength, 0)}</b>
-        <input
-          aria-label="Вес выбранного приоритета"
-          type="range"
-          min="0"
-          max="1"
-          step="0.05"
-          value={priorityStrength}
-          onChange={(e) => update({ priorityStrength: Number(e.target.value) })}
-        />
-      </label>
+      <details className="planning-settings">
+        <summary>
+          Ресурс:{" "}
+          {maxInterventions === 1 ? "одно направление" : "до двух направлений"}{" "}
+          · настройки
+        </summary>
+        <div>
+          <label className="field">
+            Приоритет
+            <select
+              aria-label="Приоритет тренера"
+              value={priority}
+              onChange={(e) =>
+                update({ priority: e.target.value as typeof priority })
+              }
+            >
+              <option value="balanced">Баланс</option>
+              <option value="attack">Атака</option>
+              <option value="defense">Защита</option>
+            </select>
+          </label>
+          <label className="field">
+            Ресурс штаба
+            <select
+              aria-label="Число вмешательств"
+              value={maxInterventions}
+              onChange={(e) =>
+                update({ maxInterventions: Number(e.target.value) })
+              }
+            >
+              <option value="1">Одно направление</option>
+              <option value="2">До двух направлений</option>
+            </select>
+          </label>
+          <label className="field range-field">
+            Сила приоритета <b>{pct(priorityStrength, 0)}</b>
+            <input
+              aria-label="Сила выбранного приоритета"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={priorityStrength}
+              onChange={(e) =>
+                update({ priorityStrength: Number(e.target.value) })
+              }
+            />
+          </label>
+        </div>
+      </details>
     </>
   );
 }
@@ -562,6 +615,11 @@ export function Methodology() {
       <Note warning>
         Исторические данные 2015/16. Модель не прогнозирует современный футбол.
       </Note>
+      <Disclosure title="Период анализа и смысл показателей" open>
+        <p>На панели тренера показан весь сезон. Если выбран исторический матч, прогноз, тактический план и AI-разбор используют только встречи до его даты. Итоги полного сезона в этом случае открываются отдельно.</p>
+        <p>xG — оценка StatsBomb вероятности гола из удара, xGA — сумма таких оценок у соперника. Это не фактические голы. Доля передач отражает событийную активность, а не измеренное время владения.</p>
+        <p>Статистика сезона, ML-прогноз и сценарий отвечают на разные вопросы: что произошло, какой исход ожидала обученная модель и что получится при заданных тренером изменениях параметров.</p>
+      </Disclosure>
       <Disclosure title="Источник, полнота и очистка">
         <p>
           Источник:{" "}
@@ -619,6 +677,19 @@ export function Methodology() {
           <b>Малая выборка.</b> Всего 38 матчей клуба. Случайные пенальти,
           календарь и реализация могут заметно менять выводы.
         </p>
+      </Disclosure>
+      <Disclosure title="Допущения тактического плана">
+        <p>Ползунки задают предположения. Они не доказывают, что конкретная тренировка даст такой эффект.</p>
+        <p>Приоритет — ориентир штаба, а не вероятность успеха. Его веса и ограничение числа направлений задают план проверки, а не измеренную эффективность вмешательства.</p>
+        <p>Вероятности Пуассона и ожидаемые очки описывают математический сценарий. Эффект необходимо проверить в матчах, учитывая соперника, поле и малую выборку.</p>
+        <p>Предматчевая база использует только более ранние матчи. Выводы полного сезона доступны отдельно как ретроспектива.</p>
+        <p>Эффект в AI-сводке относится к явно названному выбранному сценарию и его параметрам. Текстовый совет может предлагать другой эксперимент; такой совет сам по себе не имеет измеренного прироста очков.</p>
+      </Disclosure>
+      <Disclosure title="ML, статистические проверки и внешний AI">
+        <p>Четыре гипотезы клуба доступны в исследовательском блоке панели тренера: разница xG по исходам, качество ударов, поле и связь xGA с недобором очков. Поправка Холма ограничивает множественные сравнения внутри клуба.</p>
+        <p>Логистическая регрессия выбрана по хронологической валидации. На тестовых матчах качество вероятностей не превысило baseline; ничьи распознаются слабо. Метрики, матрица ошибок и сравнение моделей доступны в подготовке к сопернику, в блоке «О модели».</p>
+        <p>Расчётный советник работает без ключа. По кнопке внешний AI получает ограниченную сводку проверенных исторических данных, вопрос и сценарии. Он формулирует эксперимент, основания, альтернативы и риски; статистику и ожидаемые очки рассчитывает backend.</p>
+        <p>Ответ проходит проверку структуры, числовых утверждений и ссылок на доказательства. Валидная ссылка не доказывает правильность тактического объяснения. Тренер проверяет его по событиям, видео и следующим матчам. API-ключ хранится только на сервере; автоматических повторов платного запроса нет.</p>
       </Disclosure>
       <p className="attribution">
         Данные и модель xG — StatsBomb. Клубные названия принадлежат их

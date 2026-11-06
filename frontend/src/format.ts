@@ -7,6 +7,14 @@ export const n = (value: number | null | undefined, digits = 1) =>
       });
 export const pct = (value: number | null | undefined, digits = 1) =>
   value == null ? "—" : `${n(value * 100, digits)}%`;
+export const isRate = (metric: string) =>
+  ["pass_accuracy", "pass_share", "central_xga_share", "central_attack_share", "directness", "conversion"].includes(metric);
+export const metricValue = (metric: string, value: number | null | undefined) =>
+  isRate(metric) ? pct(value) : n(value, metric === "shot_quality" ? 3 : 2);
+export const metricUnit = (metric: string) =>
+  isRate(metric) ? "%" : metric === "shot_quality" ? "xG/удар" :
+  ["xg", "xga", "xgd", "style_xgd"].includes(metric) ? "xG/матч" :
+  metric === "points" ? "очк./матч" : "за матч";
 export const signed = (value: number, digits = 2) =>
   `${value > 0 ? "+" : ""}${n(value, digits)}`;
 export const date = (value: string) =>
@@ -50,6 +58,7 @@ export const metricName: Record<string, string> = {
   shot_quality: "Качество удара",
   defensive_events: "Защитные события",
   central_attack_share: "Центр атаки",
+  evidence_quality: "Качество основания",
   diagnostic: "Диагностика",
   modeled_gain: "Эффект модели",
   sample_support: "Выборка",
